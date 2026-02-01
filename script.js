@@ -1,6 +1,5 @@
 // --- 1. ДАННЫЕ И СОСТОЯНИЕ ---
 let transactions = [];
-// Мы работаем всегда с "Сегодня" в этом интерфейсе
 const today = new Date();
 
 function getLocalISODate(date) {
@@ -15,7 +14,6 @@ function loadData() {
     if (saved) {
         transactions = JSON.parse(saved);
     } else {
-        // Пустой старт
         transactions = [];
     }
 }
@@ -28,46 +26,53 @@ function saveData() {
 
 function calculateString(str) {
     if (!str) return 0;
+    // Считаем сумму
     return str.split('+').reduce((acc, val) => {
         const num = parseInt(val.trim());
         return acc + (isNaN(num) ? 0 : num);
     }, 0);
 }
 
-// Обработчик "Пробел = Плюс"
+// ВАЛИДАЦИЯ ВВОДА (Оставляем только цифры и знаки)
 function handleCalcInput(event) {
-    const textarea = event.target;
-    
-    // Если нажат пробел -> заменяем на +
-    if (event.key === '.') {
-        event.preventDefault();
-        const val = textarea.value;
-        if (val.length > 0 && val.slice(-1) !== '+') {
-            textarea.value += '+';
-            // Вызываем автосохранение вручную, так как value изменили программно
-            autoSave(); 
-        }
-    }
-    
-    // Валидация символов
-    const allowedKeys = ['Backspace', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', 'Tab', '+'];
+    // Разрешенные клавиши (добавили точку и запятую)
+    const allowedKeys = ['Backspace', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', 'Tab', '+', '.', ','];
     const isDigit = /^[0-9]$/.test(event.key);
     
+    // Если это не цифра и не разрешенная клавиша — блокируем
     if (!isDigit && !allowedKeys.includes(event.key)) {
         event.preventDefault();
     }
 }
 
-// --- 3. АВТОСОХРАНЕНИЕ ---
+// --- 3. АВТОСОХРАНЕНИЕ И ЗАМЕНА СИМВОЛОВ ---
+
+function handleInputAndSave(event) {
+    const textarea = event.target;
+    let val = textarea.value;
+
+    // ГЛАВНОЕ ИСПРАВЛЕНИЕ:
+    // Проверяем, есть ли в тексте точка, запятая или пробел
+    // Если есть — заменяем их на плюс
+    if (/[., ]/.test(val)) {
+        // Заменяем все точки, запятые и пробелы на "+"
+        // Также убираем двойные плюсы (например, если быстро нажали)
+        val = val.replace(/[., ]/g, '+').replace(/\+\+/g, '+');
+        
+        // Обновляем значение в поле
+        textarea.value = val;
+    }
+
+    // Вызываем сохранение
+    autoSave();
+}
 
 function autoSave() {
     const rawCash = document.getElementById('inputCash').value;
     const rawTips = document.getElementById('inputTips').value;
 
-    // 1. Удаляем старые записи ЗА СЕГОДНЯ
     transactions = transactions.filter(t => t.date !== currentDateStr);
 
-    // 2. Создаем новые записи, если поля не пустые
     if (rawCash) {
         transactions.push({
             date: currentDateStr,
@@ -86,10 +91,7 @@ function autoSave() {
         });
     }
 
-    // 3. Сохраняем в память
     saveData();
-
-    // 4. Обновляем цифры в шапке (Месяцы)
     renderTabs();
 }
 
@@ -97,7 +99,6 @@ function autoSave() {
 const monthTabsContainer = document.getElementById('monthTabs');
 const dateHeader = document.getElementById('currentDateDisplay');
 
-// Настройка месяцев
 const monthsToShow = [0, 1, 2].map(offset => {
     const d = new Date();
     d.setMonth(d.getMonth() - offset);
@@ -109,17 +110,14 @@ const monthsToShow = [0, 1, 2].map(offset => {
     };
 });
 
-// Активный месяц (по умолчанию текущий)
 let activeMonthId = monthsToShow[0].id;
 
 function init() {
     loadData();
     
-    // Устанавливаем дату в заголовок
     const dateStr = today.toLocaleString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
     dateHeader.innerText = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
 
-    // Загружаем данные в поля ввода (если они уже были сохранены сегодня)
     const todayCash = transactions.find(t => t.date === currentDateStr && t.type === 'cash');
     const todayTips = transactions.find(t => t.date === currentDateStr && t.type === 'tips');
 
@@ -129,18 +127,20 @@ function init() {
     if (todayCash) inputCash.value = todayCash.raw;
     if (todayTips) inputTips.value = todayTips.raw;
 
-    // Навешиваем слушатели событий
+    // --- Слушатели событий ---
+    
+    // 1. keydown: Только валидация (разрешить/запретить символы)
     inputCash.addEventListener('keydown', handleCalcInput);
     inputTips.addEventListener('keydown', handleCalcInput);
     
-    // Событие 'input' срабатывает при любом изменении текста (печать, удаление, вставка)
-    inputCash.addEventListener('input', autoSave);
-    inputTips.addEventListener('input', autoSave);
+    // 2. input: Здесь происходит ЗАМЕНА точки на плюс и СОХРАНЕНИЕ
+    // Событие 'input' работает на всех мобильных устройствах надежно
+    inputCash.addEventListener('input', handleInputAndSave);
+    inputTips.addEventListener('input', handleInputAndSave);
 
     renderTabs();
 }
 
-// Статистика для шапки
 function getMonthStats(monthId) {
     let cash = 0, tips = 0;
     transactions.forEach(tx => {
@@ -173,7 +173,7 @@ function renderTabs() {
         
         div.onclick = () => {
             activeMonthId = m.id;
-            renderTabs(); // Просто обновляем выделение, данные в инпутах всегда за "СЕГОДНЯ"
+            renderTabs();
         };
         
         monthTabsContainer.appendChild(div);
