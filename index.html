@@ -3,26 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Финансы AutoSave</title>
+    <title>Kopek</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#f2f2f7">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div class="mobile-container">
-        
         <div class="app-header">
             <div class="month-scroll-container">
-                <div class="month-tabs" id="monthTabs">
-                    </div>
+                <div class="month-tabs" id="monthTabs"></div>
             </div>
         </div>
 
         <div class="editor-area">
-            <div class="date-header" id="currentDateDisplay">
-                </div>
+            <div class="date-header" id="currentDateDisplay"></div>
             
             <div class="split-view">
                 <div class="split-col">
@@ -30,13 +32,7 @@
                         <span>Наличные</span>
                         <span class="dot dot-cash"></span>
                     </div>
-                    <textarea 
-                        id="inputCash" 
-                        class="calc-textarea" 
-                        placeholder="0" 
-                        inputmode="numeric" 
-                        autofocus
-                    ></textarea>
+                    <textarea id="inputCash" class="calc-textarea" placeholder="0" inputmode="numeric" autofocus></textarea>
                 </div>
 
                 <div class="split-col">
@@ -44,20 +40,24 @@
                         <span>Чаевые</span>
                         <span class="dot dot-tips"></span>
                     </div>
-                    <textarea 
-                        id="inputTips" 
-                        class="calc-textarea" 
-                        placeholder="0" 
-                        inputmode="numeric"
-                    ></textarea>
+                    <textarea id="inputTips" class="calc-textarea" placeholder="0" inputmode="numeric"></textarea>
                 </div>
             </div>
             
             <div class="status-hint">Сохраняется автоматически</div>
         </div>
-
     </div>
 
     <script src="script.js"></script>
+    
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('SW зарегистрирован!', reg))
+                    .catch(err => console.log('Ошибка SW:', err));
+            });
+        }
+    </script>
 </body>
 </html>
