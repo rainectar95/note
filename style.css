@@ -122,8 +122,8 @@ body {
 }
 
 .date-header {
-    font-size: 16px;
-    font-weight: 400;
+    font-size: 14px;
+    font-weight: 500;
     text-transform: uppercase;
     color: var(--text-secondary);
     margin-bottom: 15px;
@@ -177,19 +177,38 @@ body {
 .calc-textarea {
     flex: 1;
     border: none;
-    background: transparent;
     resize: none;
     font-family: var(--font-family);
-    font-size: 20px;
-    /* Шрифт покрупнее */
     font-weight: 500;
     color: var(--text-primary);
     outline: none;
-    line-height: 1.4;
-    padding: 0;
     width: 100%;
+
+    /* --- НАСТРОЙКИ ЛИНОВКИ --- */
+    
+    /* 1. Размер шрифта и высота строки должны быть согласованы */
+    font-size: 20px;
+    line-height: 40px; /* Делаем строки чуть просторнее для удобства */
+    
+    /* 2. Рисуем линии с помощью градиента */
+    /* Прозрачный фон 39px, затем 1px серой линии = итого 40px */
+    background-image: linear-gradient(transparent 39px, #E5E5EA 39px);
+    
+    /* 3. Размер паттерна должен в точности совпадать с line-height */
+    background-size: 100% 40px;
+    
+    /* 4. Важно: local заставляет линии скроллиться вместе с текстом */
+    background-attachment: local;
+    
+    /* 5. Корректировка положения текста, чтобы он лежал НА линии */
+    background-position: 0 -8px; 
+    padding-top: 0;
+    
+    /* Прозрачный основной фон, чтобы линии были видны */
+    background-color: transparent; 
 }
 
+/* Цвет плейсхолдера (подсказки) */
 .calc-textarea::placeholder {
     color: #d1d1d6;
 }

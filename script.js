@@ -2,12 +2,11 @@
 let transactions = [];
 const today = new Date();
 
+// Вспомогательная функция для корректной даты
 function getLocalISODate(date) {
     const offset = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - offset).toISOString().split('T')[0];
 }
-
-const currentDateStr = getLocalISODate(today);
 
 function loadData() {
     const saved = localStorage.getItem('kopek_transactions_v4');
@@ -25,45 +24,33 @@ function saveData() {
 // --- 2. ЛОГИКА КАЛЬКУЛЯТОРА ---
 
 function calculateString(str) {
+    // Безопасно превращаем в строку перед split
     if (!str) return 0;
-    // Считаем сумму
-    return str.split('+').reduce((acc, val) => {
+    return String(str).split('+').reduce((acc, val) => {
         const num = parseInt(val.trim());
         return acc + (isNaN(num) ? 0 : num);
     }, 0);
 }
 
-// ВАЛИДАЦИЯ ВВОДА (Оставляем только цифры и знаки)
 function handleCalcInput(event) {
-    // Разрешенные клавиши (добавили точку и запятую)
     const allowedKeys = ['Backspace', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', 'Tab', '+', '.', ','];
     const isDigit = /^[0-9]$/.test(event.key);
-    
-    // Если это не цифра и не разрешенная клавиша — блокируем
     if (!isDigit && !allowedKeys.includes(event.key)) {
         event.preventDefault();
     }
 }
 
-// --- 3. АВТОСОХРАНЕНИЕ И ЗАМЕНА СИМВОЛОВ ---
+// --- 3. СОХРАНЕНИЕ ---
 
 function handleInputAndSave(event) {
     const textarea = event.target;
     let val = textarea.value;
 
-    // ГЛАВНОЕ ИСПРАВЛЕНИЕ:
-    // Проверяем, есть ли в тексте точка, запятая или пробел
-    // Если есть — заменяем их на плюс
     if (/[., ]/.test(val)) {
-        // Заменяем все точки, запятые и пробелы на "+"
-        // Также убираем двойные плюсы (например, если быстро нажали)
         val = val.replace(/[., ]/g, '+').replace(/\+\+/g, '+');
-        
-        // Обновляем значение в поле
         textarea.value = val;
     }
 
-    // Вызываем сохранение
     autoSave();
 }
 
@@ -71,74 +58,112 @@ function autoSave() {
     const rawCash = document.getElementById('inputCash').value;
     const rawTips = document.getElementById('inputTips').value;
 
-    transactions = transactions.filter(t => t.date !== currentDateStr);
+    // Очищаем транзакции активного месяца перед перезаписью
+    transactions = transactions.filter(t => {
+        const d = new Date(t.date);
+        const tMonthId = `${d.getFullYear()}-${d.getMonth()}`;
+        return tMonthId !== activeMonthId;
+    });
 
-    if (rawCash) {
-        transactions.push({
-            date: currentDateStr,
-            type: 'cash',
-            amount: calculateString(rawCash),
-            raw: rawCash
-        });
-    }
+    // Формируем дату для сохранения (1-е число активного месяца)
+    const [year, monthIndex] = activeMonthId.split('-');
+    const saveDate = new Date(year, monthIndex, 1, 12); 
+    const saveDateStr = getLocalISODate(saveDate);
 
-    if (rawTips) {
-        transactions.push({
-            date: currentDateStr,
-            type: 'tips',
-            amount: calculateString(rawTips),
-            raw: rawTips
+    const parseAndPush = (rawString, type) => {
+        if (!rawString) return;
+        const parts = String(rawString).split('+');
+        parts.forEach(part => {
+            const num = parseInt(part.trim());
+            if (!isNaN(num) && num !== 0) {
+                transactions.push({
+                    date: saveDateStr,
+                    type: type,
+                    amount: num
+                });
+            }
         });
-    }
+    };
+
+    parseAndPush(rawCash, 'cash');
+    parseAndPush(rawTips, 'tips');
 
     saveData();
-    renderTabs();
+    renderTabsHeaderOnly();
 }
 
-// --- 4. UI И РЕНДЕР ---
+// --- 4. ДИНАМИЧЕСКИЕ МЕСЯЦЫ ---
+
 const monthTabsContainer = document.getElementById('monthTabs');
 const dateHeader = document.getElementById('currentDateDisplay');
 
-const monthsToShow = [0, 1, 2].map(offset => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - offset);
-    return {
-        id: `${d.getFullYear()}-${d.getMonth()}`,
-        label: d.toLocaleString('ru-RU', { month: 'long' }),
-        year: d.getFullYear(),
-        monthIndex: d.getMonth()
-    };
-});
+// Эта переменная теперь будет заполняться динамически
+let monthsToShow = [];
+let activeMonthId = null;
 
-let activeMonthId = monthsToShow[0].id;
+// Функция генерирует список месяцев: от СЕГОДНЯ назад до САМОЙ СТАРОЙ ЗАПИСИ
+function generateMonthTabs() {
+    const now = new Date();
+    
+    // 1. Находим дату самой старой транзакции
+    let minDate = new Date();
+    // Отматываем минимум на 2 месяца назад по умолчанию (чтобы всегда было хотя бы 3 вкладки)
+    minDate.setMonth(minDate.getMonth() - 2); 
+    
+    if (transactions.length > 0) {
+        // Ищем самую раннюю дату в истории
+        const dates = transactions.map(t => new Date(t.date));
+        const earliestTx = new Date(Math.min.apply(null, dates));
+        
+        // Если история уходит глубже, чем 2 месяца, берем её
+        if (earliestTx < minDate) {
+            minDate = earliestTx;
+        }
+    }
+
+    // 2. Генерируем массив месяцев от "Сейчас" до "minDate"
+    monthsToShow = [];
+    let iterator = new Date(now.getFullYear(), now.getMonth(), 1); // Первое число текущего месяца
+    const endDate = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+
+    // Цикл пока итератор не уйдет в прошлое дальше минимальной даты
+    while (iterator >= endDate) {
+        monthsToShow.push({
+            id: `${iterator.getFullYear()}-${iterator.getMonth()}`,
+            label: iterator.toLocaleString('ru-RU', { month: 'long' }),
+            year: iterator.getFullYear()
+        });
+        // Шаг назад на 1 месяц
+        iterator.setMonth(iterator.getMonth() - 1);
+    }
+}
+
+// --- 5. UI И РЕНДЕР ---
 
 function init() {
     loadData();
     
+    // Генерируем вкладки на основе данных
+    generateMonthTabs();
+    
+    // Активный месяц по умолчанию — первый в списке (Текущий)
+    if (!activeMonthId) {
+        activeMonthId = monthsToShow[0].id;
+    }
+
     const dateStr = today.toLocaleString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
     dateHeader.innerText = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
-
-    const todayCash = transactions.find(t => t.date === currentDateStr && t.type === 'cash');
-    const todayTips = transactions.find(t => t.date === currentDateStr && t.type === 'tips');
 
     const inputCash = document.getElementById('inputCash');
     const inputTips = document.getElementById('inputTips');
 
-    if (todayCash) inputCash.value = todayCash.raw;
-    if (todayTips) inputTips.value = todayTips.raw;
-
-    // --- Слушатели событий ---
-    
-    // 1. keydown: Только валидация (разрешить/запретить символы)
     inputCash.addEventListener('keydown', handleCalcInput);
     inputTips.addEventListener('keydown', handleCalcInput);
-    
-    // 2. input: Здесь происходит ЗАМЕНА точки на плюс и СОХРАНЕНИЕ
-    // Событие 'input' работает на всех мобильных устройствах надежно
     inputCash.addEventListener('input', handleInputAndSave);
     inputTips.addEventListener('input', handleInputAndSave);
 
-    renderTabs();
+    renderTabs();     
+    loadValuesToInputs(); 
 }
 
 function getMonthStats(monthId) {
@@ -152,14 +177,68 @@ function getMonthStats(monthId) {
     return { cash, tips, total: cash + tips };
 }
 
+function loadValuesToInputs() {
+    const inputCash = document.getElementById('inputCash');
+    const inputTips = document.getElementById('inputTips');
+    
+    // Логика "Чтение" vs "Редактирование"
+    const currentMonthId = monthsToShow[0].id; // Самый свежий месяц всегда первый
+
+    // Настраиваем поля
+    if (activeMonthId === currentMonthId) {
+        // Если это ТЕКУЩИЙ месяц
+        inputCash.removeAttribute('readonly');
+        inputTips.removeAttribute('readonly');
+        inputCash.placeholder = "0";
+        document.querySelector('.status-hint').innerText = 'Сохраняется автоматически';
+    } else {
+        // Если это АРХИВ
+        // Мы все равно разрешаем редактировать (как вы просили), 
+        // но визуально можно дать понять пользователю где он
+        inputCash.removeAttribute('readonly'); // Оставляем редактируемым по вашей просьбе
+        inputTips.removeAttribute('readonly');
+        document.querySelector('.status-hint').innerText = `Редактирование архива за ${monthsToShow.find(m => m.id === activeMonthId)?.label}`;
+    }
+
+    // Загружаем данные в строку
+    const currentMonthTrans = transactions.filter(t => {
+        const d = new Date(t.date);
+        return `${d.getFullYear()}-${d.getMonth()}` === activeMonthId;
+    });
+
+    const cashParts = currentMonthTrans.filter(t => t.type === 'cash').map(t => t.amount);
+    const tipsParts = currentMonthTrans.filter(t => t.type === 'tips').map(t => t.amount);
+
+    inputCash.value = cashParts.join('+');
+    inputTips.value = tipsParts.join('+');
+}
+
 function formatMoney(num) { return num.toLocaleString('ru-RU') + ' ₽'; }
 function formatMoneyShort(num) { return num.toLocaleString('ru-RU'); }
 
+function renderTabsHeaderOnly() {
+    monthsToShow.forEach(m => {
+        const stats = getMonthStats(m.id);
+        const card = document.getElementById(`card-${m.id}`);
+        if (card) {
+            card.querySelector('.m-total').innerText = formatMoney(stats.total);
+            card.querySelector('.pill.cash').innerText = formatMoneyShort(stats.cash);
+            card.querySelector('.pill.tips').innerText = formatMoneyShort(stats.tips);
+        }
+    });
+}
+
 function renderTabs() {
     monthTabsContainer.innerHTML = '';
+    
+    // Если вдруг вкладок стало больше (при наступлении нового месяца), перегенерируем
+    // Но для простоты UI делаем это при инициализации. 
+    // Здесь просто отрисовываем то, что есть в monthsToShow.
+    
     monthsToShow.forEach(m => {
         const stats = getMonthStats(m.id);
         const div = document.createElement('div');
+        div.id = `card-${m.id}`;
         div.className = `month-card ${m.id === activeMonthId ? 'active' : ''}`;
         
         div.innerHTML = `
@@ -173,7 +252,8 @@ function renderTabs() {
         
         div.onclick = () => {
             activeMonthId = m.id;
-            renderTabs();
+            renderTabs();       
+            loadValuesToInputs(); 
         };
         
         monthTabsContainer.appendChild(div);
